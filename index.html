@@ -59,6 +59,19 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
 .kpi b{display:block;font-size:16px;color:var(--azul)}
 .kpi span{font-size:10px}
 .searchbox{width:100%;padding:5px 8px;border:1px solid #c3cede;border-radius:6px;margin-bottom:6px}
+@media (max-width:760px){
+  header{padding:8px 12px;gap:8px}
+  header h1{font-size:14px}
+  header .sub{font-size:10px}
+  .layout{flex-direction:column;height:auto}
+  #main{order:1;height:58vh;min-height:300px}
+  #sidebar{order:2;width:100%;min-width:0;max-height:none;border-right:none;border-top:1px solid #d5deea}
+  .zoomctl button{width:40px;height:38px;font-size:18px}
+  .zoomctl .zreset{font-size:14px}
+  .zoomctl .zlevel{font-size:11px}
+  #editor{left:8px;right:8px;bottom:8px;width:auto;max-height:62vh}
+  #tooltip{max-width:220px}
+}
 </style>
 </head>
 <body>
@@ -313,6 +326,33 @@ function zoomBy(factor){
     moved=true;view.tx+=dx;view.ty+=dy;sx=e.clientX;sy=e.clientY;applyView();
   });
   window.addEventListener('mouseup',()=>{panning=false;wrap.classList.remove('panning');});
+  // Táctil: un dedo desplaza, dos dedos hacen zoom (pellizco) hacia el punto medio
+  const tdist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  const tmid=t=>({x:(t[0].clientX+t[1].clientX)/2,y:(t[0].clientY+t[1].clientY)/2});
+  let tmode=null,lastD=0,lastM=null;
+  wrap.addEventListener('touchstart',e=>{
+    if(e.touches.length===1){tmode='pan';moved=false;sx=e.touches[0].clientX;sy=e.touches[0].clientY;}
+    else if(e.touches.length===2){tmode='pinch';lastD=tdist(e.touches);lastM=tmid(e.touches);}
+  },{passive:false});
+  wrap.addEventListener('touchmove',e=>{
+    const rect=wrap.getBoundingClientRect();
+    if(tmode==='pan'&&e.touches.length===1){
+      const dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;
+      if(!moved && Math.abs(dx)+Math.abs(dy)<6)return;
+      moved=true;e.preventDefault();
+      view.tx+=dx;view.ty+=dy;sx=e.touches[0].clientX;sy=e.touches[0].clientY;applyView();
+    }else if(tmode==='pinch'&&e.touches.length===2){
+      e.preventDefault();moved=true;
+      const d=tdist(e.touches),m=tmid(e.touches);
+      if(lastD>0)zoomAt(d/lastD,m.x-rect.left,m.y-rect.top);
+      if(lastM){view.tx+=m.x-lastM.x;view.ty+=m.y-lastM.y;applyView();}
+      lastD=d;lastM=m;
+    }
+  },{passive:false});
+  wrap.addEventListener('touchend',e=>{
+    if(e.touches.length===0)tmode=null;
+    else if(e.touches.length===1){tmode='pan';sx=e.touches[0].clientX;sy=e.touches[0].clientY;}
+  });
   // Evita que un arrastre dispare el clic del marcador (abrir editor)
   wrap.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
 })();
