@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de Calor Hospitalario — HSDA</title>
+<style>
+:root{
+  --riesgo-critico:rgba(239,68,68,0.58); --riesgo-alto:rgba(249,115,22,0.55);
+  --riesgo-medio:rgba(250,204,21,0.50); --riesgo-bajo:rgba(132,204,22,0.45);
+  --borde-critico:#991b1b; --borde-alto:#c2410c; --borde-medio:#a16207; --borde-bajo:#3f6212;
+  --azul:#0f2a56; --gris:#334155; --bg:#eef2f7; --panel:#ffffff;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gris);font-size:13px}
+header{background:var(--azul);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:600}
+header .sub{font-size:11px;opacity:.8}
+.badge{background:#1d3f74;padding:2px 8px;border-radius:10px;font-size:11px}
+.layout{display:flex;height:calc(100vh - 52px)}
+#sidebar{width:310px;min-width:310px;background:var(--panel);border-right:1px solid #d5deea;overflow-y:auto;padding:12px}
+#main{flex:1;position:relative;overflow:hidden;background:#f7f9fc}
+#svgwrap{width:100%;height:100%;overflow:auto;position:relative}
+#svgwrap svg{width:100%;height:auto;display:block}
+.section{margin-bottom:16px;border-bottom:1px solid #e5ebf3;padding-bottom:12px}
+.section h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--azul);margin:0 0 8px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+button,select{font-family:inherit;font-size:12px;border:1px solid #c3cede;background:#fff;color:var(--gris);border-radius:6px;padding:5px 9px;cursor:pointer}
+button:hover{background:#f0f4f9}
+button.active{background:var(--azul);color:#fff;border-color:var(--azul)}
+.lvlbtn{flex:1;min-width:42px;text-align:center}
+label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer}
+.legend div{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12px}
+.swatch{width:16px;height:16px;border-radius:3px;border:1px solid #0003}
+.rankrow{display:flex;justify-content:space-between;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer;font-size:12px}
+.rankrow:hover{background:#eef3fa}
+.rankrow .idx{font-weight:700;font-variant-numeric:tabular-nums}
+.pill{font-size:10px;padding:1px 6px;border-radius:8px;color:#fff;white-space:nowrap}
+.Critico{background:#dc2626}.Alto{background:#ea580c}.Medio{background:#ca8a04}.Bajo{background:#65a30d}
+#tooltip{position:fixed;pointer-events:none;background:#0b1e3d;color:#fff;padding:8px 10px;border-radius:6px;font-size:11px;line-height:1.5;max-width:250px;z-index:50;opacity:0;transition:opacity .1s;box-shadow:0 4px 14px #0005}
+#tooltip b{color:#ffd; font-size:12px}
+.marker{cursor:pointer;transition:opacity .15s}
+.marker:hover{opacity:.85!important}
+.mlabel{font-size:8px;fill:#111;paint-order:stroke;stroke:#fff;stroke-width:1.6px;font-weight:600;pointer-events:none}
+.note{font-size:11px;background:#fff7e6;border:1px solid #f0d999;border-radius:6px;padding:8px;color:#7a5a00;line-height:1.5}
+#editor{position:fixed;right:14px;bottom:14px;width:290px;background:#fff;border:1px solid #c3cede;border-radius:10px;box-shadow:0 8px 30px #0003;padding:12px;display:none;z-index:60;max-height:80vh;overflow:auto}
+#editor h3{margin:0 0 4px;font-size:13px;color:var(--azul)}
+#editor .er{display:flex;justify-content:space-between;align-items:center;margin:4px 0}
+#editor input[type=range]{width:120px}
+#editor .val{width:18px;text-align:center;font-weight:700}
+.foot{font-size:10px;color:#8a97a8;margin-top:8px;line-height:1.5}
+.kpi{display:flex;gap:6px;flex-wrap:wrap}
+.kpi div{flex:1;min-width:60px;background:#f2f6fb;border-radius:6px;padding:6px;text-align:center}
+.kpi b{display:block;font-size:16px;color:var(--azul)}
+.kpi span{font-size:10px}
+.searchbox{width:100%;padding:5px 8px;border:1px solid #c3cede;border-radius:6px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Mapa de Calor Hospitalario · Exposición Ocupacional</h1>
+    <div class="sub">Hospital San Diego de Alcalá · v1.0 preliminar · <span id="fecha"></span></div>
+  </div>
+  <span class="badge" id="modelbadge">Modelo: Multifactor</span>
+  <span class="badge" id="countbadge"></span>
+</header>
+<div class="layout">
+  <aside id="sidebar">
+    <div class="section">
+      <h2>Nivel</h2>
+      <div class="row" id="levels"></div>
+    </div>
+    <div class="section">
+      <h2>Modelo de riesgo</h2>
+      <div class="row">
+        <button id="btnmf" class="active" onclick="setModel('mf')">Multifactor</button>
+        <button id="btnbio" onclick="setModel('bio')">Biológico</button>
+        <button id="btnmues" onclick="setModel('muestreo')">Muestreo</button>
+      </div>
+      <div class="foot" id="formula"></div>
+    </div>
+    <div class="section" id="muespanel" style="display:none">
+      <h2>Muestreo ambiental (RFSST Art.41 · NOM-048 · OMS 2020)</h2>
+      <div class="foot" style="margin-bottom:6px">Hotspot = generación de aerosoles × alto flujo de personal (Capa 1 × Capa 2). Frecuencia diferenciada por clasificación biológica.</div>
+      <div class="legend">
+        <div><span class="swatch" style="background:#dc2626"></span>Crítico → <b>Quincenal</b></div>
+        <div><span class="swatch" style="background:#ea580c"></span>Alto → <b>Mensual</b></div>
+        <div><span class="swatch" style="background:#ca8a04"></span>Medio → <b>Trimestral</b></div>
+        <div><span class="swatch" style="background:#65a30d"></span>Bajo → <b>Semestral</b></div>
+        <div style="margin-top:4px"><span class="swatch" style="background:#fff;border:2px solid #7c3aed"></span>◆ Hotspot (muestreo prioritario)</div>
+      </div>
+      <div class="kpi" id="kpimues" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px">
+        <button onclick="exportPlanAnual()">Plan Anual de Muestreo (CSV)</button>
+      </div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--azul)">Grupos de Riesgo OMS (GR)</summary>
+        <div class="foot" style="margin-top:4px">GR1 riesgo escaso · GR2 moderado (mínimo hospitalario) · GR3 elevado individual · GR4 elevado/transmisible. Asignación preliminar por tipo de área, editable.</div>
+      </details>
+      <details style="margin-top:6px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--azul)">Glosario de medios y métodos</summary>
+        <div class="foot" id="glosario" style="margin-top:4px"></div>
+      </details>
+    </div>
+    <div class="section">
+      <h2>Filtrar por clasificación</h2>
+      <div id="classfilter"></div>
+    </div>
+    <div class="section">
+      <h2>Resumen del nivel</h2>
+      <div class="kpi" id="kpi"></div>
+    </div>
+    <div class="section">
+      <h2>Ranking del nivel</h2>
+      <input class="searchbox" id="search" placeholder="Buscar área…" oninput="render()">
+      <div id="ranking"></div>
+    </div>
+    <div class="section">
+      <h2>Exportar</h2>
+      <div class="row">
+        <button onclick="exportJSON()">JSON</button>
+        <button onclick="exportSVG()">SVG</button>
+        <button onclick="exportPNG()">PNG</button>
+        <button onclick="exportCSV()">CSV ranking</button>
+      </div>
+    </div>
+    <div class="section legend">
+      <h2>Leyenda</h2>
+      <div><span class="swatch" style="background:var(--riesgo-critico)"></span>Crítico (4.0–5.0)</div>
+      <div><span class="swatch" style="background:var(--riesgo-alto)"></span>Alto (3.0–3.9)</div>
+      <div><span class="swatch" style="background:var(--riesgo-medio)"></span>Medio (2.0–2.9)</div>
+      <div><span class="swatch" style="background:var(--riesgo-bajo)"></span>Bajo (1.0–1.9)</div>
+    </div>
+    <div class="section">
+      <details>
+        <summary style="cursor:pointer;font-size:12px;color:var(--azul);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Marco normativo</summary>
+        <div class="foot" style="margin-top:6px">
+          <b>LFT</b> Art. 132 (I, XVII) y 512-D · obligaciones del patrón.<br>
+          <b>RFSST</b> Art. 41 · estudio de contaminantes biológicos, reconocimiento, señalización, control de accesos, evaluación de concentraciones y exámenes médicos al POE.<br>
+          <b>NOM-048-SSA1-1993</b> · método normalizado de evaluación de riesgo por agentes ambientales.<br>
+          <b>NOM-087-SEMARNAT-SSA1-2002</b> · clasificación y manejo de RPBI.<br>
+          <b>Manual de Bioseguridad OMS 3ª ed./2020</b> · grupos de riesgo, niveles de bioseguridad y control de aerosoles.<br>
+          <b>Validación:</b> muestreos en puntos críticos analizados por laboratorio acreditado EMA y aprobado STPS. Análisis internos no eximen obligaciones legales.
+        </div>
+      </details>
+    </div>
+    <div class="section">
+      <details>
+        <summary style="cursor:pointer;font-size:12px;color:var(--azul);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Nomenclatura y método</summary>
+        <div class="foot" style="margin-top:6px">
+          <b>ID:</b> NIVEL-NN (N1–N4, CUB, AZ).<br>
+          <b>Puntajes 1–5</b> por arquetipo de área (motor de reglas, editable). El color = cálculo, no asignación manual.<br>
+          <b>MF</b> = ocup·.15 + interrel·.15 + biol·.20 + infec·.15 + quím·.15 + fís·.10 + incid·.10 − (ctrl−1)·.10.<br>
+          <b>BIO</b> = ocup·.10 + cont_pac·.15 + sangre·.15 + proc·.10 + RPBI·.15 + muestras·.10 + aeros·.10 + interrel·.10 + incid·.10 − (ctrl−1)·.10.<br>
+          Índice acotado [1,5]. Clasif.: ≥4 Crítico · ≥3 Alto · ≥2 Medio · resto Bajo.<br>
+          <b>GR</b> por arquetipo (OMS). <b>Hotspot</b> = aerosoles≥4 × interrel≥4. <b>Frecuencia</b> = f(clasif. biológica).<br>
+          Detalle completo y tabla de arquetipos en <b>METODOLOGIA.md</b>.
+        </div>
+      </details>
+    </div>
+    <div class="note">Mapa <b>PRELIMINAR</b>. Puntajes derivados por arquetipo de área (auditables y editables), no validados en campo. Ocupación inferida por puesto. Sin datos de incidentes reales (=1). Requiere validación con jefaturas, UVEH, mantenimiento y limpieza antes de uso formal.</div>
+  </aside>
+  <main id="main">
+    <div id="svgwrap"><div style="padding:40px;color:#889">Cargando plano…</div></div>
+  </main>
+</div>
+<div id="tooltip"></div>
+<div id="editor"></div>
+
+<script src="planos/N1.js"></script>
+<script src="planos/N2.js"></script>
+<script src="planos/N3.js"></script>
+<script src="planos/N4.js"></script>
+<script src="data/areas.js"></script>
+<script src="data/plantilla.js"></script>
+<script>
+const LEVELS={N1:'Nivel 1',N2:'Nivel 2',N3:'Nivel 3',N4:'Nivel 4'};
+const FORMULAS={
+ mf:'índice = ocup·0.15 + interrel·0.15 + biológico·0.20 + infeccioso·0.15 + químico·0.15 + físico·0.10 + incidentes·0.10 − (controles−1)·0.10',
+ bio:'índice = ocup·0.10 + contacto_pac·0.15 + sangre/fluidos·0.15 + procedimientos·0.10 + RPBI·0.15 + muestras·0.10 + aerosoles·0.10 + interrel·0.10 + incidentes·0.10 − (controles−1)·0.10',
+ muestreo:'Riesgo de muestreo = índice biológico. Frecuencia: Crítico→Quincenal, Alto→Mensual, Medio→Trimestral, Bajo→Semestral. Hotspot = aerosoles≥4 × interrelación≥4.'
+};
+const FREQ={Critico:'Quincenal',Alto:'Mensual',Medio:'Trimestral',Bajo:'Semestral'};
+const GLOSARIO=[
+ ['TSA','Tripticaseína Soya Agar. Medio general rico en nutrientes para <b>bacterias</b> (amplio espectro). Incubación 35–37 °C, 24–48 h. Base para recuento bacteriano en aire y superficies.'],
+ ['Sabouraud (SDA)','Sabouraud Dextrosa Agar. Medio ácido (pH ~5.6) con alta glucosa que inhibe bacterias y favorece <b>hongos y levaduras</b>. Incubación 25–30 °C, 3–7 días.'],
+ ['PDA','Papa Dextrosa Agar. Medio para <b>mohos/hongos filamentosos</b>, favorece esporulación e identificación (Aspergillus, Penicillium). 25–30 °C.'],
+ ['Agar sangre','Medio enriquecido general; revela patrón de <b>hemólisis</b> (Streptococcus, S. aureus).'],
+ ['Agar chocolate','Sangre lisada por calor; para <b>exigentes</b> (Haemophilus, Neisseria).'],
+ ['MacConkey','Selectivo y diferencial para <b>Gram-negativos entéricos</b>; distingue fermentadores de lactosa (E. coli) de no fermentadores.'],
+ ['BCYE','Buffered Charcoal Yeast Extract. Selectivo para <b>Legionella</b> (agua/condensados). 35 °C, 3–10 días.'],
+ ['Löwenstein-Jensen / MGIT','Medios para <b>Mycobacterium tuberculosis</b>; crecimiento lento (semanas). Áreas de aislamiento respiratorio.'],
+ ['Baird-Parker / Manitol sal','Selectivos para <b>Staphylococcus aureus</b> (incl. SARM).'],
+ ['Cicloserina-cefoxitina / CHROMagar','Selectivos para <b>Clostridioides difficile</b> (esporas).'],
+ ['Placa de contacto (RODAC) / hisopo','<b>Método de superficie</b>: la placa/hisopo toca la superficie para recuento por área.'],
+ ['Muestreo de aire','<b>Volumétrico</b> (impacta un volumen conocido de aire sobre agar) o <b>sedimentación</b> (placas expuestas 15 min). El volumétrico cuantifica UFC/m³.'],
+ ['UFC','Unidad Formadora de Colonias: cada colonia contable ≈ un microorganismo viable cultivable. Métrica del recuento.'],
+ ['MDR','Multidrogorresistente: microorganismo resistente a varias familias de antibióticos (mayor riesgo de IAAS).'],
+];
+function scoreKey(){return MODEL==='muestreo'?'bio':MODEL;}
+function isHotspot(a){return a.bio.aerosoles>=4 && a.bio.interrelacion>=4;}
+const MFVARS=[['ocupacion','Ocupación'],['interrelacion','Interrelación'],['biologico','Biológico'],['infeccioso','Infeccioso'],['quimico','Químico'],['fisico','Físico'],['incidentes','Incidentes'],['controles','Controles']];
+const BIOVARS=[['ocupacion','Ocupación'],['contacto_paciente','Contacto paciente'],['sangre_fluidos','Sangre/fluidos'],['procedimientos','Procedimientos'],['rpbi','RPBI'],['muestras_biologicas','Muestras'],['aerosoles','Aerosoles'],['interrelacion','Interrelación'],['incidentes','Incidentes'],['controles','Controles']];
+let MODEL='mf', LEVEL='N1';
+let classOn={Critico:true,Alto:true,Medio:true,Bajo:true};
+document.getElementById('fecha').textContent=new Date().toLocaleDateString('es-MX');
+
+function recalc(a,m){
+  const s=a[m];
+  let x;
+  if(m==='mf') x=s.ocupacion*0.15+s.interrelacion*0.15+s.biologico*0.20+s.infeccioso*0.15+s.quimico*0.15+s.fisico*0.10+s.incidentes*0.10-(s.controles-1)*0.10;
+  else x=s.ocupacion*0.10+s.contacto_paciente*0.15+s.sangre_fluidos*0.15+s.procedimientos*0.10+s.rpbi*0.15+s.muestras_biologicas*0.10+s.aerosoles*0.10+s.interrelacion*0.10+s.incidentes*0.10-(s.controles-1)*0.10;
+  x=Math.max(1,Math.min(5,Math.round(x*100)/100));
+  s.indice=x;
+  const C=x>=4?['Critico','rgba(239,68,68,0.58)','#991b1b']:x>=3?['Alto','rgba(249,115,22,0.55)','#c2410c']:x>=2?['Medio','rgba(250,204,21,0.50)','#a16207']:['Bajo','rgba(132,204,22,0.45)','#3f6212'];
+  s.clasificacion=C[0];s.color=C[1];s.borde=C[2];
+}
+
+function buildLevels(){
+  const c=document.getElementById('levels');c.innerHTML='';
+  Object.keys(LEVELS).forEach(k=>{
+    const b=document.createElement('button');b.className='lvlbtn'+(k===LEVEL?' active':'');b.textContent=k;
+    b.title=LEVELS[k];b.onclick=()=>{LEVEL=k;loadPlano();};c.appendChild(b);
+  });
+}
+function buildClassFilter(){
+  const c=document.getElementById('classfilter');c.innerHTML='';
+  ['Critico','Alto','Medio','Bajo'].forEach(k=>{
+    const l=document.createElement('label');l.className='chk';
+    l.innerHTML=`<input type=checkbox ${classOn[k]?'checked':''}> <span class="pill ${k}">${k}</span>`;
+    l.querySelector('input').onchange=e=>{classOn[k]=e.target.checked;render();};
+    c.appendChild(l);
+  });
+}
+function setModel(m){
+  MODEL=m;
+  document.getElementById('btnmf').classList.toggle('active',m==='mf');
+  document.getElementById('btnbio').classList.toggle('active',m==='bio');
+  document.getElementById('btnmues').classList.toggle('active',m==='muestreo');
+  const names={mf:'Multifactor',bio:'Biológico',muestreo:'Muestreo ambiental'};
+  document.getElementById('modelbadge').textContent='Modelo: '+names[m];
+  document.getElementById('formula').textContent=FORMULAS[m];
+  document.getElementById('muespanel').style.display=(m==='muestreo')?'block':'none';
+  const gl=document.getElementById('glosario');
+  if(gl && !gl.dataset.filled){gl.innerHTML=GLOSARIO.map(g=>`<div style="margin:4px 0"><b>${g[0]}:</b> ${g[1]}</div>`).join('');gl.dataset.filled='1';}
+  render();
+}
+function areasOf(l){return AREAS.filter(a=>a.nivel===l);}
+
+function loadPlano(){
+  buildLevels();
+  const wrap=document.getElementById('svgwrap');
+  const svg=window.PLANOS[LEVEL];
+  if(!svg){wrap.innerHTML='<div style="padding:40px">Plano no disponible</div>';return;}
+  wrap.innerHTML=svg;
+  const el=wrap.querySelector('svg');
+  el.removeAttribute('width');el.removeAttribute('height');
+  if(!el.getAttribute('viewBox')) el.setAttribute('viewBox','0 0 1632 1056');
+  let layer=el.querySelector('#heatmap-layer');
+  if(!layer){layer=document.createElementNS('http://www.w3.org/2000/svg','g');layer.id='heatmap-layer';el.appendChild(layer);}
+  render();
+}
+
+function render(){
+  const el=document.querySelector('#svgwrap svg');if(!el)return;
+  const layer=el.querySelector('#heatmap-layer');layer.innerHTML='';
+  const list=areasOf(LEVEL);const sk=scoreKey();
+  list.forEach(a=>recalc(a,sk));
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  // markers
+  list.forEach(a=>{
+    const s=a[sk];
+    if(!classOn[s.clasificacion])return;
+    const hot=MODEL==='muestreo' && isHotspot(a);
+    const r=a.geo_aprox?26:22;
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',a.x);c.setAttribute('cy',a.y);c.setAttribute('r',r);
+    c.setAttribute('fill',s.color);
+    c.setAttribute('stroke',hot?'#7c3aed':s.borde);
+    c.setAttribute('stroke-width',hot?3.2:(s.clasificacion==='Critico'?2.2:1));
+    if(a.geo_aprox)c.setAttribute('stroke-dasharray','4 3');
+    c.setAttribute('class','marker');
+    c.setAttribute('data-id',a.area_id);
+    g.appendChild(c);
+    if(hot){
+      const ring=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx',a.x);ring.setAttribute('cy',a.y);ring.setAttribute('r',r+5);
+      ring.setAttribute('fill','none');ring.setAttribute('stroke','#7c3aed');
+      ring.setAttribute('stroke-width',1.2);ring.setAttribute('stroke-dasharray','2 3');
+      ring.setAttribute('pointer-events','none');g.appendChild(ring);
+    }
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',a.x);t.setAttribute('y',a.y+3);t.setAttribute('text-anchor','middle');
+    t.setAttribute('class','mlabel');t.textContent=s.indice.toFixed(1);
+    g.appendChild(t);
+    c.addEventListener('mousemove',e=>showTip(e,a));
+    c.addEventListener('mouseleave',hideTip);
+    c.addEventListener('click',()=>openEditor(a));
+    layer.appendChild(g);
+  });
+  renderRanking(list,q);
+  renderKPI(list);
+  if(MODEL==='muestreo')renderMuesKPI(list);
+  document.getElementById('countbadge').textContent=list.length+' áreas · '+LEVELS[LEVEL];
+  document.getElementById('formula').textContent=FORMULAS[MODEL];
+}
+
+function renderKPI(list){
+  const sk=scoreKey();const cnt={Critico:0,Alto:0,Medio:0,Bajo:0};
+  list.forEach(a=>cnt[a[sk].clasificacion]++);
+  const k=document.getElementById('kpi');
+  k.innerHTML=`<div><b>${cnt.Critico}</b><span>Crítico</span></div><div><b>${cnt.Alto}</b><span>Alto</span></div><div><b>${cnt.Medio}</b><span>Medio</span></div><div><b>${cnt.Bajo}</b><span>Bajo</span></div>`;
+}
+function renderMuesKPI(list){
+  const hs=list.filter(isHotspot).length;
+  const fq={Quincenal:0,Mensual:0,Trimestral:0,Semestral:0};
+  list.forEach(a=>fq[FREQ[a.bio.clasificacion]]++);
+  document.getElementById('kpimues').innerHTML=
+    `<div><b>${hs}</b><span>Hotspots</span></div><div><b>${fq.Quincenal}</b><span>Quincenal</span></div><div><b>${fq.Mensual}</b><span>Mensual</span></div><div><b>${fq.Trimestral+fq.Semestral}</b><span>Trim/Sem</span></div>`;
+}
+function renderRanking(list,q){
+  const sk=scoreKey();const r=document.getElementById('ranking');r.innerHTML='';
+  list.filter(a=>classOn[a[sk].clasificacion] && (!q||a.nombre_area.toLowerCase().includes(q)))
+    .sort((x,y)=>y[sk].indice-x[sk].indice)
+    .forEach(a=>{
+      const s=a[sk];const extra=MODEL==='muestreo'?` <span class="pill" style="background:#475569">${FREQ[s.clasificacion]}</span>${isHotspot(a)?' ◆':''}`:'';
+      const d=document.createElement('div');d.className='rankrow';
+      d.innerHTML=`<span>${a.nombre_area}</span><span><span class="pill ${s.clasificacion}">${s.clasificacion}</span>${extra} <span class="idx">${s.indice.toFixed(2)}</span></span>`;
+      d.onclick=()=>{openEditor(a);flash(a);};
+      r.appendChild(d);
+    });
+}
+function flash(a){
+  const c=document.querySelector(`#svgwrap circle[data-id="${a.area_id}"]`);
+  if(c){c.setAttribute('r',(a.geo_aprox?26:22)+14);setTimeout(()=>c.setAttribute('r',a.geo_aprox?26:22),500);
+    c.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});}
+}
+function showTip(e,a){
+  const sk=scoreKey();const s=a[sk];const tp=document.getElementById('tooltip');
+  const vars=sk==='mf'?MFVARS:BIOVARS;
+  let rows=vars.map(v=>`${v[1]}: <b>${s[v[0]]}</b>`).join(' · ');
+  const plt=plantillaFor(a);
+  let mues='';
+  if(MODEL==='muestreo'){
+    mues=`<br><span style="color:#c4b5fd">Muestreo:</span> <b>${a.gr_label}</b>${isHotspot(a)?' · <b style="color:#ddd6fe">◆ HOTSPOT</b>':''}<br>
+      Frecuencia: <b>${FREQ[s.clasificacion]}</b><br>Tipo: ${a.muestreo.tipo}<br>Medios: ${a.muestreo.medios}<br>
+      <span style="color:#fca5a5">Buscar:</span> ${a.micro.buscar}<br>
+      <span style="color:#fca5a5">Si se detecta:</span> ${a.micro.significado}`;
+  }
+  tp.innerHTML=`<b>${a.nombre_area}</b><br>${a.categoria} · ${LEVELS[a.nivel]} · ${a.gr_label}<br>
+    Índice: <b>${s.indice.toFixed(2)}</b> · <span class="pill ${s.clasificacion}">${s.clasificacion}</span><br>${rows}<br>
+    Estatus: ${a.estatus}${a.geo_aprox?' · <i>geometría aprox.</i>':''}${plt?'<br>Plantilla inferida: '+plt:''}${mues}`;
+  tp.style.opacity=1;tp.style.left=Math.min(e.clientX+14,innerWidth-260)+'px';tp.style.top=(e.clientY+14)+'px';
+}
+function hideTip(){document.getElementById('tooltip').style.opacity=0;}
+function plantillaFor(a){
+  const map={enfermeria:'Enfermeria',urgencias:'Urgencias',ucin:'UCIN/Cuneros',limpieza:'Limpieza',
+    cocina:'Nutricion/Cocina',farmacia:'Farmacia',mantenimiento:'Mantenimiento',camilleria:'Camilleria',
+    hospitalizacion:'Hospitalizacion',consultorio:'Recepcion/Consultorios',admision:'Admision/Caja',
+    laboratorio:'Laboratorio'};
+  const d=map[a.arquetipo];if(!d||!PLANTILLA[d])return '';
+  const p=PLANTILLA[d];return `${d} (${p.total})`;
+}
+
+function openEditor(a){
+  const ed=document.getElementById('editor');ed.style.display='block';
+  const sk=scoreKey();const s=a[sk];const vars=sk==='mf'?MFVARS:BIOVARS;
+  let html=`<h3>${a.nombre_area}</h3><div style="font-size:11px;margin-bottom:6px">${a.categoria} · ${LEVELS[a.nivel]} · ${a.area_id} · ${a.gr_label}</div>`;
+  if(MODEL==='muestreo'){
+    html+=`<div class="foot" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:6px;margin-bottom:6px">
+      <b>Muestreo</b> ${isHotspot(a)?'· ◆ Hotspot':''}<br>Frecuencia: <b>${FREQ[s.clasificacion]}</b><br>${a.muestreo.tipo}<br>Medios: ${a.muestreo.medios}<br>Incubación: ${a.muestreo.incubacion}<br>Exposición: ${a.muestreo.exposicion}<br>
+      <b style="color:#7c3aed">Buscar:</b> ${a.micro.buscar}<br><b style="color:#7c3aed">Si se detecta:</b> ${a.micro.significado}</div>`;
+  }
+  vars.forEach(v=>{
+    html+=`<div class="er"><span>${v[1]}</span><span><input type="range" min="1" max="5" value="${s[v[0]]}" data-k="${v[0]}"><span class="val" id="v-${v[0]}">${s[v[0]]}</span></span></div>`;
+  });
+  html+=`<div class="er" style="margin-top:6px"><b>Índice ${sk==='mf'?'multifactor':'biológico'}</b><b id="edidx" style="font-size:15px">${s.indice.toFixed(2)}</b></div>`;
+  html+=`<div class="er"><span>Estatus</span><select id="edstatus">
+    <option>Preliminar</option><option>Validado en campo</option><option>Corregido</option><option>Pendiente de información</option><option>No aplica</option></select></div>`;
+  html+=`<div class="row" style="margin-top:8px"><button onclick="document.getElementById('editor').style.display='none'">Cerrar</button></div>`;
+  ed.innerHTML=html;
+  ed.querySelector('#edstatus').value=a.estatus;
+  ed.querySelector('#edstatus').onchange=e=>{a.estatus=e.target.value;};
+  ed.querySelectorAll('input[type=range]').forEach(inp=>{
+    inp.oninput=e=>{
+      const k=e.target.dataset.k;s[k]=parseInt(e.target.value);
+      document.getElementById('v-'+k).textContent=e.target.value;
+      recalc(a,sk);document.getElementById('edidx').textContent=s.indice.toFixed(2);
+      render();
+    };
+  });
+}
+function openTipStay(a){}
+
+function exportJSON(){
+  download('mapa_calor_'+LEVEL+'.json',JSON.stringify(areasOf(LEVEL),null,1),'application/json');
+}
+function exportCSV(){
+  const sk=scoreKey();const list=areasOf(LEVEL);list.forEach(a=>recalc(a,sk));
+  const s2=[...list].sort((x,y)=>y[sk].indice-x[sk].indice);
+  let rows=[['prioridad','area_id','nivel','area','categoria','indice','clasificacion','estatus']];
+  s2.forEach((a,i)=>rows.push([i+1,a.area_id,a.nivel,'"'+a.nombre_area+'"',a.categoria,a[sk].indice.toFixed(2),a[sk].clasificacion,a.estatus]));
+  download('ranking_'+LEVEL+'_'+MODEL+'.csv',rows.map(r=>r.join(',')).join('\n'),'text/csv');
+}
+function exportPlanAnual(){
+  // todos los niveles, ordenado por indice biologico
+  const list=AREAS.map(a=>a);list.forEach(a=>recalc(a,'bio'));
+  const s2=[...list].sort((x,y)=>y.bio.indice-x.bio.indice);
+  let rows=[['prioridad','area_id','nivel','area','categoria','grupo_riesgo','indice_biologico','clasificacion','hotspot','frecuencia','tipo_muestreo','medios','incubacion','exposicion','buscar','si_se_detecta','estatus']];
+  const esc=t=>'"'+String(t).replace(/"/g,'""')+'"';
+  s2.forEach((a,i)=>rows.push([i+1,a.area_id,a.nivel,esc(a.nombre_area),esc(a.categoria),'GR'+a.gr,a.bio.indice.toFixed(2),a.bio.clasificacion,isHotspot(a)?'SI':'no',FREQ[a.bio.clasificacion],esc(a.muestreo.tipo),esc(a.muestreo.medios),esc(a.muestreo.incubacion),esc(a.muestreo.exposicion),esc(a.micro.buscar),esc(a.micro.significado),a.estatus].join(',')));
+  download('plan_anual_muestreo_HSDA.csv','﻿'+rows.map(r=>Array.isArray(r)?r.join(','):r).join('\n'),'text/csv');
+}
+function exportSVG(){
+  const el=document.querySelector('#svgwrap svg');if(!el)return;
+  download('mapa_calor_'+LEVEL+'_'+MODEL+'.svg',new XMLSerializer().serializeToString(el),'image/svg+xml');
+}
+function exportPNG(){
+  const el=document.querySelector('#svgwrap svg');if(!el)return;
+  const xml=new XMLSerializer().serializeToString(el);
+  const img=new Image();
+  const svg64=btoa(unescape(encodeURIComponent(xml)));
+  img.onload=()=>{
+    const cv=document.createElement('canvas');cv.width=1632*2;cv.height=1056*2;
+    const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0,cv.width,cv.height);
+    cv.toBlob(b=>{const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='mapa_calor_'+LEVEL+'_'+MODEL+'.png';a.click();});
+  };
+  img.onerror=()=>alert('Para PNG use un navegador; si falla, exporte SVG y conviértalo.');
+  img.src='data:image/svg+xml;base64,'+svg64;
+}
+function download(name,txt,type){
+  const b=new Blob([txt],{type});const u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
+}
+buildClassFilter();setModel('mf');loadPlano();
+</script>
+</body>
+</html>

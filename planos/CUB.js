@@ -1,0 +1,1 @@
+/* plano eliminado del estudio */
