@@ -27,3 +27,8 @@ test('incluye únicamente las clasificaciones visibles del modelo activo', () =>
   const result = buildEntries(areas, 'bio', { Critico: true, Alto: false, Medio: false, Bajo: false }, true);
   assert.deepEqual(result.map(({ area, score }) => [area.area_id, score.clasificacion]), [['N1-02', 'Critico']]);
 });
+
+test('expone el renderizador SVG junto con la selección de entradas', () => {
+  const { render } = loadRiskCloud();
+  assert.equal(typeof render, 'function');
+});
