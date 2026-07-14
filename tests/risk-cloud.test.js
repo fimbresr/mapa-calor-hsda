@@ -34,7 +34,13 @@ function createSvgStub() {
   markerLayer.id = 'heatmap-layer';
   const svg = createNode('svg');
   svg.children.push(markerLayer);
-  svg.querySelector = (selector) => svg.children.find((child) => `#${child.id}` === selector) || null;
+  svg.querySelector = (selector) => {
+    const find = (node) => {
+      if (`#${node.id}` === selector || node.name === selector) return node;
+      return node.children.map(find).find(Boolean) || null;
+    };
+    return svg.children.map(find).find(Boolean) || null;
+  };
   svg.insertBefore = (child, reference) => {
     const index = reference ? svg.children.indexOf(reference) : -1;
     if (index < 0) svg.children.push(child);
@@ -60,6 +66,7 @@ test('la página expone el interruptor e invoca el renderizador de nube', () => 
   assert.match(html, /<script src="risk-cloud\.js"><\/script>/);
   assert.match(html, /id="cloudtoggle"/);
   assert.match(html, /window\.RiskCloud\.render\(el, list, sk, classOn, cloudOn\)/);
+  assert.doesNotMatch(html, /risk-cloud-blur/);
 });
 
 test('no crea entradas cuando la nube está desactivada', () => {
@@ -88,14 +95,20 @@ test('renderiza halos no interactivos detrás de los marcadores y limpia el rend
 
   const cloudLayer = svg.querySelector('#risk-cloud-layer');
   const firstHalo = cloudLayer.children[0];
-  assert.deepEqual(svg.children, [cloudLayer, markerLayer]);
+  const criticalGradient = svg.querySelector('#risk-cloud-gradient-Critico');
+  assert.ok(svg.children.indexOf(cloudLayer) < svg.children.indexOf(markerLayer));
   assert.equal(cloudLayer.attributes['pointer-events'], 'none');
   assert.equal(firstHalo.attributes.cx, '120');
   assert.equal(firstHalo.attributes.cy, '240');
   assert.equal(firstHalo.attributes.r, '88');
-  assert.equal(firstHalo.attributes.fill, '#d00');
-  assert.equal(firstHalo.attributes['fill-opacity'], '0.34');
-  assert.equal(firstHalo.attributes.filter, 'url(#risk-cloud-blur)');
+  assert.equal(firstHalo.attributes.fill, 'url(#risk-cloud-gradient-Critico)');
+  assert.equal(criticalGradient.name, 'radialGradient');
+  assert.equal(criticalGradient.children.length, 3);
+  assert.equal(criticalGradient.children[0].attributes.offset, '0%');
+  assert.notEqual(criticalGradient.children[0].attributes['stop-opacity'], '0');
+  assert.equal(criticalGradient.children[1].attributes.offset, '55%');
+  assert.equal(criticalGradient.children[2].attributes.offset, '100%');
+  assert.equal(criticalGradient.children[2].attributes['stop-opacity'], '0');
 
   render(svg, [{
     x: 300,
@@ -105,9 +118,15 @@ test('renderiza halos no interactivos detrás de los marcadores y limpia el rend
   }], 'mf', { Alto: true }, true);
 
   assert.equal(svg.querySelector('#risk-cloud-layer'), cloudLayer);
-  assert.deepEqual(svg.children, [cloudLayer, markerLayer]);
+  assert.ok(svg.children.indexOf(cloudLayer) < svg.children.indexOf(markerLayer));
   assert.equal(cloudLayer.children.length, 1);
   assert.notEqual(cloudLayer.children[0], firstHalo);
   assert.equal(cloudLayer.children[0].attributes.r, '76');
-  assert.equal(cloudLayer.children[0].attributes.fill, '#e80');
+  assert.equal(cloudLayer.children[0].attributes.fill, 'url(#risk-cloud-gradient-Alto)');
+  assert.ok(svg.querySelector('#risk-cloud-gradient-Alto'));
+
+  render(svg, [], 'mf', {}, false);
+
+  assert.equal(cloudLayer.children.length, 0);
+  assert.ok(svg.children.includes(markerLayer));
 });

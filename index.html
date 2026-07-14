@@ -285,13 +285,6 @@ function loadPlano(){
   if(!el.getAttribute('viewBox')) el.setAttribute('viewBox','0 0 1632 1056');
   let layer=el.querySelector('#heatmap-layer');
   if(!layer){layer=document.createElementNS('http://www.w3.org/2000/svg','g');layer.id='heatmap-layer';el.appendChild(layer);}
-  if(!el.querySelector('#risk-cloud-blur')){
-    let defs=el.querySelector('defs');
-    if(!defs){defs=document.createElementNS('http://www.w3.org/2000/svg','defs');el.insertBefore(defs,el.firstChild);}
-    const filter=document.createElementNS('http://www.w3.org/2000/svg','filter');filter.id='risk-cloud-blur';
-    filter.setAttribute('x','-60%');filter.setAttribute('y','-60%');filter.setAttribute('width','220%');filter.setAttribute('height','220%');
-    const blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','24');filter.appendChild(blur);defs.appendChild(filter);
-  }
   resetView();
   render();
 }
