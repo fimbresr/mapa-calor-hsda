@@ -118,12 +118,21 @@ git commit -m "test: cubre selección de nube de riesgo"
 
 - [ ] **Step 1: Write the failing test**
 
-Extender `tests/risk-cloud.test.js` con una prueba de la interfaz de renderizado:
+Extender `tests/risk-cloud.test.js` con una prueba de la interfaz y de los
+invariantes de capa. El stub SVG debe implementar `querySelector`,
+`insertBefore`, `appendChild`, `replaceChildren`, `setAttribute` y
+`document.createElementNS`; comprobar que `render` existe, inserta
+`#risk-cloud-layer` antes de `#heatmap-layer`, aplica `pointer-events="none"`,
+crea halos con el radio y filtro esperados y vacía halos anteriores al volver a
+renderizar.
 
 ```js
-test('expone el renderizador SVG junto con la selección de entradas', () => {
+test('renderiza halos no interactivos detrás de los marcadores y limpia el render previo', () => {
   const { render } = loadRiskCloud();
   assert.equal(typeof render, 'function');
+  // El stub define un markerLayer, registra insertBefore y conserva atributos.
+  // Tras dos llamadas, se espera una sola capa de nube antes del marcador,
+  // pointer-events=none y exactamente un halo de la segunda llamada.
 });
 ```
 
@@ -170,10 +179,9 @@ function render(svg, areas, scoreKey, classOn, enabled) {
 }
 ```
 
-Añadir al SVG, una vez por carga de plano, un `filter` en `defs` con id
-`risk-cloud-blur`, `x="-60%"`, `y="-60%"`, `width="220%"`, `height="220%"` y
-`feGaussianBlur` con `stdDeviation="24"`. Exportar `render` junto con
-`buildEntries`.
+Exportar `render` junto con `buildEntries`. El filtro SVG
+`#risk-cloud-blur` se crea una vez por carga de plano en Task 3, donde existe
+el ciclo de vida del SVG cargado; el renderizador sólo lo referencia.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -234,7 +242,9 @@ En `index.html`:
 
 3. Declarar `let cloudOn=false;` junto con `MODEL`, `LEVEL` y `classOn`.
 4. Asignar `document.getElementById('cloudtoggle').onchange=e=>{cloudOn=e.target.checked;render();};` después de construir el filtro.
-5. En `loadPlano()`, después de crear `#heatmap-layer`, crear el filtro SVG `#risk-cloud-blur` en `defs` si aún no existe.
+5. En `loadPlano()`, después de crear `#heatmap-layer`, crear el filtro SVG
+   `#risk-cloud-blur` en `defs` si aún no existe, con `x="-60%"`, `y="-60%"`,
+   `width="220%"`, `height="220%"` y `feGaussianBlur stdDeviation="24"`.
 6. En `render()`, después de recalcular los puntajes y antes de crear los marcadores, invocar:
 
 ```js
