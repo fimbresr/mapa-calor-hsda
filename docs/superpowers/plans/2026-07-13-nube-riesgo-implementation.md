@@ -4,7 +4,7 @@
 
 **Goal:** Mostrar una nube SVG opcional, independiente por clasificación visible, detrás de los marcadores del mapa de calor.
 
-**Architecture:** Una utilidad JavaScript local decidirá qué áreas contribuyen a la nube según el interruptor y los filtros de clasificación. `index.html` cargará esa utilidad, creará una capa SVG `risk-cloud-layer` antes de `heatmap-layer` y renderizará halos radiales desenfocados para las áreas seleccionadas.
+**Architecture:** Una utilidad JavaScript local decidirá qué áreas contribuyen a la nube según el interruptor y los filtros de clasificación. `index.html` cargará esa utilidad, creará una capa SVG `risk-cloud-layer` antes de `heatmap-layer` y renderizará halos con degradados radiales autocontenidos para las áreas seleccionadas.
 
 **Tech Stack:** HTML estático, JavaScript del navegador, SVG nativo, `node:test` para pruebas sin dependencias.
 
@@ -14,7 +14,7 @@
 - No introducir dependencias, backend ni proceso de compilación.
 - La nube es una ayuda visual de prioridad; no define límites físicos ni una ubicación exacta de muestreo.
 - Los círculos, etiquetas e interacciones existentes siempre permanecen sobre la nube.
-- SVG y PNG deben conservar automáticamente la nube cuando el interruptor está activo.
+- SVG y PNG deben conservar automáticamente la nube cuando el interruptor está activo, sin depender de filtros de desenfoque del visor.
 
 ---
 
@@ -123,7 +123,7 @@ invariantes de capa. El stub SVG debe implementar `querySelector`,
 `insertBefore`, `appendChild`, `replaceChildren`, `setAttribute` y
 `document.createElementNS`; comprobar que `render` existe, inserta
 `#risk-cloud-layer` antes de `#heatmap-layer`, aplica `pointer-events="none"`,
-crea halos con el radio y filtro esperados y vacía halos anteriores al volver a
+crea halos con el radio y degradado radial esperados y vacía halos anteriores al volver a
 renderizar.
 
 ```js
@@ -149,7 +149,7 @@ Ampliar `risk-cloud.js` con un renderizador que use estas constantes y comportam
 ```js
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CLOUD_RADIUS = 76;
-const CLOUD_OPACITY = 0.34;
+const CLOUD_COLORS = { Critico: '#ef4444', Alto: '#f97316', Medio: '#facc15', Bajo: '#84cc16' };
 
 function ensureLayer(svg) {
   let layer = svg.querySelector('#risk-cloud-layer');
@@ -171,17 +171,18 @@ function render(svg, areas, scoreKey, classOn, enabled) {
     halo.setAttribute('cx', area.x);
     halo.setAttribute('cy', area.y);
     halo.setAttribute('r', area.geo_aprox ? CLOUD_RADIUS + 12 : CLOUD_RADIUS);
-    halo.setAttribute('fill', score.color);
-    halo.setAttribute('fill-opacity', CLOUD_OPACITY);
-    halo.setAttribute('filter', 'url(#risk-cloud-blur)');
+    halo.setAttribute('fill', `url(#risk-cloud-gradient-${score.clasificacion})`);
     layer.appendChild(halo);
   });
 }
 ```
 
-Exportar `render` junto con `buildEntries`. El filtro SVG
-`#risk-cloud-blur` se crea una vez por carga de plano en Task 3, donde existe
-el ciclo de vida del SVG cargado; el renderizador sólo lo referencia.
+Crear en `defs` un `radialGradient` por clasificación visible. Cada degradado
+debe tener centro de color con opacidad perceptible, una parada intermedia y
+una parada exterior con opacidad `0`; sus ids serán
+`risk-cloud-gradient-Critico`, `risk-cloud-gradient-Alto`,
+`risk-cloud-gradient-Medio` y `risk-cloud-gradient-Bajo`. Crear cada degradado
+una sola vez y exportar `render` junto con `buildEntries`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -242,9 +243,8 @@ En `index.html`:
 
 3. Declarar `let cloudOn=false;` junto con `MODEL`, `LEVEL` y `classOn`.
 4. Asignar `document.getElementById('cloudtoggle').onchange=e=>{cloudOn=e.target.checked;render();};` después de construir el filtro.
-5. En `loadPlano()`, después de crear `#heatmap-layer`, crear el filtro SVG
-   `#risk-cloud-blur` en `defs` si aún no existe, con `x="-60%"`, `y="-60%"`,
-   `width="220%"`, `height="220%"` y `feGaussianBlur stdDeviation="24"`.
+5. No crear filtros SVG en `loadPlano()`: el renderizador crea los degradados
+   radiales requeridos en `defs` al renderizar cada clasificación visible.
 6. En `render()`, después de recalcular los puntajes y antes de crear los marcadores, invocar:
 
 ```js
