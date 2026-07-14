@@ -23,13 +23,13 @@
     };
   }
 
-  function panBy(view, dx, dy, width = WIDTH, height = HEIGHT) {
+  function panBy(view, dx, dy, viewportWidth, viewportHeight, width = WIDTH, height = HEIGHT) {
     const visibleWidth = width / view.z;
     const visibleHeight = height / view.z;
     return {
       ...view,
-      x: Math.max(0, Math.min(width - visibleWidth, view.x - dx / view.z)),
-      y: Math.max(0, Math.min(height - visibleHeight, view.y - dy / view.z)),
+      x: Math.max(0, Math.min(width - visibleWidth, view.x - dx * width / (viewportWidth * view.z))),
+      y: Math.max(0, Math.min(height - visibleHeight, view.y - dy * height / (viewportHeight * view.z))),
     };
   }
 
