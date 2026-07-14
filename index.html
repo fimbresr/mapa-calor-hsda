@@ -124,6 +124,7 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
     <div class="section">
       <h2>Filtrar por clasificación</h2>
       <div id="classfilter"></div>
+      <label class="chk"><input id="cloudtoggle" type="checkbox"> <span>Nube de riesgo</span></label>
     </div>
     <div class="section">
       <h2>Resumen del nivel</h2>
@@ -198,6 +199,7 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
 <script src="planos/N4.js"></script>
 <script src="data/areas.js"></script>
 <script src="data/plantilla.js"></script>
+<script src="risk-cloud.js"></script>
 <script>
 const LEVELS={N1:'Nivel 1',N2:'Nivel 2',N3:'Nivel 3',N4:'Nivel 4'};
 const FORMULAS={
@@ -226,7 +228,7 @@ function scoreKey(){return MODEL==='muestreo'?'bio':MODEL;}
 function isHotspot(a){return a.bio.aerosoles>=4 && a.bio.interrelacion>=4;}
 const MFVARS=[['ocupacion','Ocupación'],['interrelacion','Interrelación'],['biologico','Biológico'],['infeccioso','Infeccioso'],['quimico','Químico'],['fisico','Físico'],['incidentes','Incidentes'],['controles','Controles']];
 const BIOVARS=[['ocupacion','Ocupación'],['contacto_paciente','Contacto paciente'],['sangre_fluidos','Sangre/fluidos'],['procedimientos','Procedimientos'],['rpbi','RPBI'],['muestras_biologicas','Muestras'],['aerosoles','Aerosoles'],['interrelacion','Interrelación'],['incidentes','Incidentes'],['controles','Controles']];
-let MODEL='mf', LEVEL='N1';
+let MODEL='mf', LEVEL='N1', cloudOn=false;
 let classOn={Critico:true,Alto:true,Medio:true,Bajo:true};
 document.getElementById('fecha').textContent=new Date().toLocaleDateString('es-MX');
 
@@ -283,6 +285,13 @@ function loadPlano(){
   if(!el.getAttribute('viewBox')) el.setAttribute('viewBox','0 0 1632 1056');
   let layer=el.querySelector('#heatmap-layer');
   if(!layer){layer=document.createElementNS('http://www.w3.org/2000/svg','g');layer.id='heatmap-layer';el.appendChild(layer);}
+  if(!el.querySelector('#risk-cloud-blur')){
+    let defs=el.querySelector('defs');
+    if(!defs){defs=document.createElementNS('http://www.w3.org/2000/svg','defs');el.insertBefore(defs,el.firstChild);}
+    const filter=document.createElementNS('http://www.w3.org/2000/svg','filter');filter.id='risk-cloud-blur';
+    filter.setAttribute('x','-60%');filter.setAttribute('y','-60%');filter.setAttribute('width','220%');filter.setAttribute('height','220%');
+    const blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','24');filter.appendChild(blur);defs.appendChild(filter);
+  }
   resetView();
   render();
 }
@@ -362,6 +371,7 @@ function render(){
   const layer=el.querySelector('#heatmap-layer');layer.innerHTML='';
   const list=areasOf(LEVEL);const sk=scoreKey();
   list.forEach(a=>recalc(a,sk));
+  window.RiskCloud.render(el, list, sk, classOn, cloudOn);
   const q=(document.getElementById('search').value||'').toLowerCase();
   // markers
   list.forEach(a=>{
@@ -530,7 +540,7 @@ function download(name,txt,type){
   const b=new Blob([txt],{type});const u=URL.createObjectURL(b);
   const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
 }
-buildClassFilter();setModel('mf');loadPlano();
+buildClassFilter();document.getElementById('cloudtoggle').onchange=e=>{cloudOn=e.target.checked;render();};setModel('mf');loadPlano();
 </script>
 </body>
 </html>

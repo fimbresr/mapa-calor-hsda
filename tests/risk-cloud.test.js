@@ -55,6 +55,13 @@ const areas = [
   { area_id: 'N1-03', mf: { clasificacion: 'Medio' }, bio: { clasificacion: 'Bajo' } },
 ];
 
+test('la página expone el interruptor e invoca el renderizador de nube', () => {
+  const html = fs.readFileSync('index.html', 'utf8');
+  assert.match(html, /<script src="risk-cloud\.js"><\/script>/);
+  assert.match(html, /id="cloudtoggle"/);
+  assert.match(html, /window\.RiskCloud\.render\(el, list, sk, classOn, cloudOn\)/);
+});
+
 test('no crea entradas cuando la nube está desactivada', () => {
   const { buildEntries } = loadRiskCloud();
   const result = buildEntries(areas, 'mf', { Critico: true, Alto: true, Medio: true, Bajo: true }, false);
