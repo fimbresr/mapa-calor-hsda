@@ -61,6 +61,28 @@ const areas = [
   { area_id: 'N1-03', mf: { clasificacion: 'Medio' }, bio: { clasificacion: 'Bajo' } },
 ];
 
+function entry(clasificacion, x, y, indice) {
+  return { area: { x, y, geo_aprox: false }, score: { clasificacion, indice } };
+}
+
+test('separa regiones por clasificación y por ausencia de intersección', () => {
+  const { buildRegions } = loadRiskCloud();
+  const regions = buildRegions([
+    entry('Critico', 0, 0, 4.5), entry('Critico', 40, 0, 4),
+    entry('Critico', 400, 0, 5), entry('Alto', 0, 0, 3.5),
+  ]);
+  assert.equal(JSON.stringify(regions.map((region) => [region.classification, region.entries.length])), JSON.stringify([
+    ['Critico', 2], ['Critico', 1], ['Alto', 1],
+  ]));
+});
+
+test('pondera el punto recomendado por el índice y usa respaldo fuera de nube', () => {
+  const { buildRegions } = loadRiskCloud();
+  const [region] = buildRegions([entry('Critico', 0, 0, 5), entry('Critico', 140, 0, 3)]);
+  assert.ok(region.point.x < 50);
+  assert.equal(region.fallback.area.x, 0);
+});
+
 test('la página expone el interruptor e invoca el renderizador de nube', () => {
   const html = fs.readFileSync('index.html', 'utf8');
   assert.match(html, /<script src="risk-cloud\.js"><\/script>/);
@@ -129,4 +151,25 @@ test('renderiza halos no interactivos detrás de los marcadores y limpia el rend
 
   assert.equal(cloudLayer.children.length, 0);
   assert.ok(svg.children.includes(markerLayer));
+});
+
+test('anota cada región visible con contorno punteado y punto de muestreo', () => {
+  const { document, markerLayer, svg } = createSvgStub();
+  const { render } = loadRiskCloud(document);
+  render(svg, [
+    { x: 100, y: 100, geo_aprox: false, mf: { clasificacion: 'Critico', indice: 5 } },
+    { x: 160, y: 100, geo_aprox: false, mf: { clasificacion: 'Critico', indice: 3 } },
+  ], 'mf', { Critico: true }, true);
+
+  const cloudLayer = svg.querySelector('#risk-cloud-layer');
+  const regionLayer = svg.querySelector('#risk-region-layer');
+  assert.equal(regionLayer.attributes['pointer-events'], 'none');
+  assert.ok(svg.children.indexOf(cloudLayer) < svg.children.indexOf(regionLayer));
+  assert.ok(svg.children.indexOf(regionLayer) < svg.children.indexOf(markerLayer));
+  const outline = regionLayer.children.find((node) => node.attributes['stroke-dasharray'] === '8 6');
+  assert.equal(outline.name, 'path');
+  assert.ok(regionLayer.children.some((node) => node.name === 'circle'));
+
+  render(svg, [], 'mf', {}, false);
+  assert.equal(regionLayer.children.length, 0);
 });
