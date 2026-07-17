@@ -125,10 +125,21 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
       <h2>Filtrar por clasificación</h2>
       <div id="classfilter"></div>
       <label class="chk"><input id="cloudtoggle" type="checkbox"> <span>Nube de riesgo</span></label>
+      <label class="chk"><input id="samplingtoggle" type="checkbox"> <span>Puntos de muestreo</span></label>
     </div>
     <div class="section">
       <h2>Resumen del nivel</h2>
       <div class="kpi" id="kpi"></div>
+    </div>
+    <div class="section" id="stpspanel">
+      <h2>Cumplimiento STPS — Art. 41 RFSST</h2>
+      <div class="kpi" id="kpistps"></div>
+      <div class="foot" id="stpsdetail" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px">
+        <button onclick="exportSTPSCSV()">Reporte STPS (CSV)</button>
+        <button onclick="exportPlanAnualSTPS()">Plan Anual (CSV)</button>
+        <button onclick="exportSTPSPDF()">Reporte STPS (HTML)</button>
+      </div>
     </div>
     <div class="section">
       <h2>Ranking del nivel</h2>
@@ -142,6 +153,7 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
         <button onclick="exportSVG()">SVG</button>
         <button onclick="exportPNG()">PNG</button>
         <button onclick="exportCSV()">CSV ranking</button>
+        <button onclick="PlanoEjecutivo.exportPlanoEjecutivo(LEVEL)" style="background:#0f2a56;color:#fff;border-color:#0f2a56">Plano Ejecutivo (PDF)</button>
       </div>
     </div>
     <div class="section legend">
@@ -201,6 +213,9 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;c
 <script src="data/plantilla.js"></script>
 <script src="zoom-vectorial.js"></script>
 <script src="risk-cloud.js"></script>
+<script src="sampling-markers.js"></script>
+<script src="stps-report.js"></script>
+<script src="plano-ejecutivo.js"></script>
 <script>
 const LEVELS={N1:'Nivel 1',N2:'Nivel 2',N3:'Nivel 3',N4:'Nivel 4'};
 const FORMULAS={
@@ -229,7 +244,7 @@ function scoreKey(){return MODEL==='muestreo'?'bio':MODEL;}
 function isHotspot(a){return a.bio.aerosoles>=4 && a.bio.interrelacion>=4;}
 const MFVARS=[['ocupacion','Ocupación'],['interrelacion','Interrelación'],['biologico','Biológico'],['infeccioso','Infeccioso'],['quimico','Químico'],['fisico','Físico'],['incidentes','Incidentes'],['controles','Controles']];
 const BIOVARS=[['ocupacion','Ocupación'],['contacto_paciente','Contacto paciente'],['sangre_fluidos','Sangre/fluidos'],['procedimientos','Procedimientos'],['rpbi','RPBI'],['muestras_biologicas','Muestras'],['aerosoles','Aerosoles'],['interrelacion','Interrelación'],['incidentes','Incidentes'],['controles','Controles']];
-let MODEL='mf', LEVEL='N1', cloudOn=false;
+let MODEL='mf', LEVEL='N1', cloudOn=false, samplingOn=false;
 let classOn={Critico:true,Alto:true,Medio:true,Bajo:true};
 document.getElementById('fecha').textContent=new Date().toLocaleDateString('es-MX');
 
@@ -364,6 +379,7 @@ function render(){
   const list=areasOf(LEVEL);const sk=scoreKey();
   list.forEach(a=>recalc(a,sk));
   window.RiskCloud.render(el, list, sk, classOn, cloudOn);
+  window.SamplingMarkers.render(el, list, classOn, samplingOn);
   const q=(document.getElementById('search').value||'').toLowerCase();
   // markers
   list.forEach(a=>{
@@ -399,6 +415,7 @@ function render(){
   });
   renderRanking(list,q);
   renderKPI(list);
+  renderSTPSPanel(list);
   if(MODEL==='muestreo')renderMuesKPI(list);
   document.getElementById('countbadge').textContent=list.length+' áreas · '+LEVELS[LEVEL];
   document.getElementById('formula').textContent=FORMULAS[MODEL];
@@ -417,6 +434,18 @@ function renderMuesKPI(list){
   document.getElementById('kpimues').innerHTML=
     `<div><b>${hs}</b><span>Hotspots</span></div><div><b>${fq.Quincenal}</b><span>Quincenal</span></div><div><b>${fq.Mensual}</b><span>Mensual</span></div><div><b>${fq.Trimestral+fq.Semestral}</b><span>Trim/Sem</span></div>`;
 }
+function renderSTPSPanel(list){
+  const conMuestreo=list.filter(a=>a.evaluacion&&a.evaluacion.puntos_muestreo&&a.evaluacion.puntos_muestreo.length>0).length;
+  const puntos=list.reduce((s,a)=>s+(a.evaluacion?a.evaluacion.puntos_muestreo.length:0),0);
+  const criticos=list.filter(a=>a.bio&&a.bio.clasificacion==='Critico').length;
+  document.getElementById('kpistps').innerHTML=
+    `<div><b>${conMuestreo}</b><span>Áreas con muestreo</span></div><div><b>${puntos}</b><span>Puntos totales</span></div><div><b>${criticos}</b><span>Próx. quincenal</span></div>`;
+  const reconocidas=list.filter(a=>a.reconocimiento&&a.reconocimiento.agentes_biologicos&&a.reconocimiento.agentes_biologicos.length>0).length;
+  document.getElementById('stpsdetail').textContent=`Medida 1 (Estudio): ${reconocidas} áreas reconocidas · Medida 2 (Evaluación): ${puntos} puntos de muestreo definidos`;
+}
+function exportSTPSCSV(){window.STPSReport.exportSTPSCSV();}
+function exportPlanAnualSTPS(){window.STPSReport.exportPlanAnualSTPS();}
+function exportSTPSPDF(){window.STPSReport.exportSTPSPDF();}
 function renderRanking(list,q){
   const sk=scoreKey();const r=document.getElementById('ranking');r.innerHTML='';
   list.filter(a=>classOn[a[sk].clasificacion] && (!q||a.nombre_area.toLowerCase().includes(q)))
@@ -446,9 +475,30 @@ function showTip(e,a){
       <span style="color:#fca5a5">Buscar:</span> ${a.micro.buscar}<br>
       <span style="color:#fca5a5">Si se detecta:</span> ${a.micro.significado}`;
   }
+  let stps='';
+  if(a.evaluacion){
+    const ev=a.evaluacion;
+    const pts=ev.puntos_muestreo?ev.puntos_muestreo.length:0;
+    const freq=ev.frecuencia_label||'—';
+    const medios=ev.medios_cultivo?ev.medios_cultivo.join(', '):'—';
+    const tipo=ev.tipo||'';
+    stps+=`<br><span style="color:#a78bfa">STPS Muestreo:</span> Frecuencia: <b>${freq}</b> · Puntos: <b>${pts}</b>`;
+    stps+=`<br>Medios: ${medios}`;
+    if(tipo) stps+=`<br>Tipo: ${tipo}`;
+  }
+  if(a.reconocimiento&&a.reconocimiento.agentes_biologicos){
+    const ag=a.reconocimiento.agentes_biologicos;
+    const shown=ag.slice(0,3).map(x=>`• ${x.nombre} (${x.via})`).join(' ');
+    const extra=ag.length>3?` <i>y ${ag.length-3} más…</i>`:'';
+    stps+=`<br><span style="color:#a78bfa">Agentes:</span> ${shown}${extra}`;
+  }
+  if(a.control){
+    const epp=a.control.epp?a.control.epp.slice(0,3).join(', '):'';
+    if(epp) stps+=`<br><span style="color:#a78bfa">EPP:</span> ${epp}`;
+  }
   tp.innerHTML=`<b>${a.nombre_area}</b><br>${a.categoria} · ${LEVELS[a.nivel]} · ${a.gr_label}<br>
     Índice: <b>${s.indice.toFixed(2)}</b> · <span class="pill ${s.clasificacion}">${s.clasificacion}</span><br>${rows}<br>
-    Estatus: ${a.estatus}${a.geo_aprox?' · <i>geometría aprox.</i>':''}${plt?'<br>Plantilla inferida: '+plt:''}${mues}`;
+    Estatus: ${a.estatus}${a.geo_aprox?' · <i>geometría aprox.</i>':''}${plt?'<br>Plantilla inferida: '+plt:''}${mues}${stps}`;
   tp.style.opacity=1;tp.style.left=Math.min(e.clientX+14,innerWidth-260)+'px';tp.style.top=(e.clientY+14)+'px';
 }
 function hideTip(){document.getElementById('tooltip').style.opacity=0;}
@@ -532,7 +582,7 @@ function download(name,txt,type){
   const b=new Blob([txt],{type});const u=URL.createObjectURL(b);
   const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
 }
-buildClassFilter();document.getElementById('cloudtoggle').onchange=e=>{cloudOn=e.target.checked;render();};setModel('mf');loadPlano();
+buildClassFilter();document.getElementById('cloudtoggle').onchange=e=>{cloudOn=e.target.checked;render();};document.getElementById('samplingtoggle').onchange=e=>{samplingOn=e.target.checked;render();};setModel('mf');loadPlano();
 </script>
 </body>
 </html>
